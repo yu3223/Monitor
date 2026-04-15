@@ -13,12 +13,10 @@ USER_ID = os.getenv('LINE_USER_ID')
 def get_mops_data(market_type):
     url = "https://mopsov.twse.com.tw/mops/web/ajax_t35sc09"
     
-    # 強制設定為台灣時區
     tw_tz = pytz.timezone('Asia/Taipei')
     now = datetime.now(tw_tz)
     roc_year = now.year - 1911
     
-    # 建立與網頁一致的 POST 參數
     payload = {
         'step': '1',
         'firstin': '1',
@@ -38,26 +36,38 @@ def get_mops_data(market_type):
         res = requests.post(url, data=payload, headers=headers, timeout=30)
         res.encoding = 'utf-8'
         
+        # --- 步驟 A: 檢查是否有「查無所需資料」 ---
         if "查無所需資料" in res.text:
             return "查無所需資料"
             
+        # --- 步驟 B: 如果沒出現該關鍵字，才開始解析表格 ---
         soup = BeautifulSoup(res.text, 'html.parser')
-        table = soup.find('table', {'class': 'hasBorder'})
+        target_table = None
         
-        if not table:
+        # 尋找含有「公司代號」文字的資料表格
+        for table in soup.find_all('table', {'class': 'hasBorder'}):
+            if "公司代號" in table.text:
+                target_table = table
+                break
+        
+        if not target_table:
             return "查無所需資料"
             
-        rows = table.find_all('tr')[1:] # 跳過標題
+        rows = target_table.find_all('tr')[1:] # 跳過標題列
         results = []
         for row in rows:
             cols = row.find_all('td')
             if len(cols) >= 2:
-                # 抓取 公司代號 與 公司名稱
+                # 取得公司代號與名稱
                 code = cols[0].get_text(strip=True)
                 name = cols[1].get_text(strip=True)
-                results.append(f"{code} {name}")
+                
+                # 確保抓到的是真正的公司代號 (純數字且長度 >= 4)
+                if code.isdigit() and len(code) >= 4:
+                    results.append(f"{code} {name}")
         
         return results if results else "查無所需資料"
+
     except Exception as e:
         return f"偵測出錯: {e}"
 
@@ -67,16 +77,14 @@ def main():
     date_display = now.strftime('%Y-%m-%d')
     time_display = now.strftime('%H:%M')
     
-    # 執行抓取
     sij_res = get_mops_data('sij') # 上市
     otc_res = get_mops_data('otc') # 上櫃
     
-    # 優化後的格式化邏輯：防止訊息過長
     def format_msg(data):
         if isinstance(data, list):
             count = len(data)
             content = ", ".join(data)
-            # 如果超過 2000 字就截斷 (留空間給另一半資料)
+            # 限制長度避免 LINE 噴錯 (5000字上限)
             if len(content) > 2000:
                 content = content[:2000] + "...(略)"
             return f"偵測到[{count}]筆資料\n({content})"
@@ -88,17 +96,14 @@ def main():
         f"上櫃:{format_msg(otc_res)}"
     )
     
-    # 最後一道防線：如果整則訊息還是超過 5000 字
     if len(final_msg) > 5000:
         final_msg = final_msg[:4990] + "..."
     
-    # 發送通知
     try:
         line_bot_api = LineBotApi(CHANNEL_ACCESS_TOKEN)
         line_bot_api.push_message(USER_ID, TextSendMessage(text=final_msg))
         print("✅ 訊息發送成功")
     except Exception as e:
-        # 這裡會印出你截圖看到的那個錯誤
         print(f"❌ LINE發送失敗: {e}")
 
 if __name__ == "__main__":
