@@ -71,10 +71,15 @@ def main():
     sij_res = get_mops_data('sij') # 上市
     otc_res = get_mops_data('otc') # 上櫃
     
-    # 格式化訊息
+    # 優化後的格式化邏輯：防止訊息過長
     def format_msg(data):
         if isinstance(data, list):
-            return f"偵測到[{len(data)}]筆資料({', '.join(data)})"
+            count = len(data)
+            content = ", ".join(data)
+            # 如果超過 2000 字就截斷 (留空間給另一半資料)
+            if len(content) > 2000:
+                content = content[:2000] + "...(略)"
+            return f"偵測到[{count}]筆資料\n({content})"
         return data
 
     final_msg = (
@@ -83,12 +88,17 @@ def main():
         f"上櫃:{format_msg(otc_res)}"
     )
     
+    # 最後一道防線：如果整則訊息還是超過 5000 字
+    if len(final_msg) > 5000:
+        final_msg = final_msg[:4990] + "..."
+    
     # 發送通知
     try:
         line_bot_api = LineBotApi(CHANNEL_ACCESS_TOKEN)
         line_bot_api.push_message(USER_ID, TextSendMessage(text=final_msg))
         print("✅ 訊息發送成功")
     except Exception as e:
+        # 這裡會印出你截圖看到的那個錯誤
         print(f"❌ LINE發送失敗: {e}")
 
 if __name__ == "__main__":
