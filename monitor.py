@@ -2,29 +2,29 @@ import os
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
+import pytz
 from linebot import LineBotApi
 from linebot.models import TextSendMessage
 
-# 取得 GitHub Secrets
+# 讀取 Secrets
 CHANNEL_ACCESS_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN')
 USER_ID = os.getenv('LINE_USER_ID')
 
 def get_mops_data(market_type):
     url = "https://mopsov.twse.com.tw/mops/web/ajax_t35sc09"
     
-    # 計算當天日期 (民國紀年格式: 115/04/15)
-    now = datetime.now()
-    year = now.year - 1911
-    date_str = f"{year}/{now.strftime('%m/%d')}"
+    # 強制設定為台灣時區
+    tw_tz = pytz.timezone('Asia/Taipei')
+    now = datetime.now(tw_tz)
+    roc_year = now.year - 1911
     
-    # 設定 POST 參數
-    # step: 1, firstin: 1, TYPEK: sij (上市) 或 otc (上櫃)
+    # 建立與網頁一致的 POST 參數
     payload = {
         'step': '1',
         'firstin': '1',
         'off': '1',
         'TYPEK': market_type, 
-        'year': str(year),
+        'year': str(roc_year),
         'month': now.strftime('%m'),
         'day': now.strftime('%d')
     }
@@ -37,52 +37,59 @@ def get_mops_data(market_type):
     try:
         res = requests.post(url, data=payload, headers=headers, timeout=30)
         res.encoding = 'utf-8'
-        soup = BeautifulSoup(res.text, 'html.parser')
         
-        # 判斷是否有資料 (公開資訊觀測站查無資料通常會出現特定文字)
-        if "查無所需資料" in res.text or not soup.find('table', {'class': 'hasBorder'}):
+        if "查無所需資料" in res.text:
             return "查無所需資料"
-        
-        # 抓取表格中的公司代號與名稱
+            
+        soup = BeautifulSoup(res.text, 'html.parser')
         table = soup.find('table', {'class': 'hasBorder'})
-        rows = table.find_all('tr')[1:]  # 跳過標題列
+        
+        if not table:
+            return "查無所需資料"
+            
+        rows = table.find_all('tr')[1:] # 跳過標題
         results = []
         for row in rows:
             cols = row.find_all('td')
             if len(cols) >= 2:
-                code = cols[0].text.strip()
-                name = cols[1].text.strip()
+                # 抓取 公司代號 與 公司名稱
+                code = cols[0].get_text(strip=True)
+                name = cols[1].get_text(strip=True)
                 results.append(f"{code} {name}")
         
-        return results
+        return results if results else "查無所需資料"
     except Exception as e:
         return f"偵測出錯: {e}"
 
 def main():
-    # 執行監測
-    sij_data = get_mops_data('sij') # 上市
-    otc_data = get_mops_data('otc') # 上櫃
+    tw_tz = pytz.timezone('Asia/Taipei')
+    now = datetime.now(tw_tz)
+    date_display = now.strftime('%Y-%m-%d')
+    time_display = now.strftime('%H:%M')
     
-    now_str = datetime.now().strftime('%Y-%m-%d %H:%M')
+    # 執行抓取
+    sij_res = get_mops_data('sij') # 上市
+    otc_res = get_mops_data('otc') # 上櫃
     
-    # 格式化上市訊息
-    if isinstance(sij_data, list):
-        sij_msg = f"偵測到[{len(sij_data)}]筆資料\n(" + ", ".join(sij_data) + ")"
-    else:
-        sij_msg = sij_data
+    # 格式化訊息
+    def format_msg(data):
+        if isinstance(data, list):
+            return f"偵測到[{len(data)}]筆資料({', '.join(data)})"
+        return data
 
-    # 格式化上櫃訊息
-    if isinstance(otc_data, list):
-        otc_msg = f"偵測到[{len(otc_data)}]筆資料\n(" + ", ".join(otc_data) + ")"
-    else:
-        otc_msg = otc_data
-
-    # 合併最終訊息
-    final_msg = f"[{now_str}]\n上市:{sij_msg}\n上櫃:{otc_msg}"
+    final_msg = (
+        f"[{date_display}][{time_display}]\n"
+        f"上市:{format_msg(sij_res)}\n"
+        f"上櫃:{format_msg(otc_res)}"
+    )
     
-    # 發送 LINE
-    line_bot_api = LineBotApi(CHANNEL_ACCESS_TOKEN)
-    line_bot_api.push_message(USER_ID, TextSendMessage(text=final_msg))
+    # 發送通知
+    try:
+        line_bot_api = LineBotApi(CHANNEL_ACCESS_TOKEN)
+        line_bot_api.push_message(USER_ID, TextSendMessage(text=final_msg))
+        print("✅ 訊息發送成功")
+    except Exception as e:
+        print(f"❌ LINE發送失敗: {e}")
 
 if __name__ == "__main__":
     main()

@@ -2,8 +2,7 @@ name: MOPS Daily Monitor
 
 on:
   schedule:
-    # 台灣時間 18:00 (UTC 10:00) 與 21:00 (UTC 13:00)
-    - cron: '0 10,13 * * *'
+    - cron: '0 10,13 * * *' # 台灣 18:00 與 21:00
   workflow_dispatch:
 
 jobs:
@@ -11,10 +10,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4 # 升級版本
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5 # 升級版本
         with:
           python-version: '3.10'
 
