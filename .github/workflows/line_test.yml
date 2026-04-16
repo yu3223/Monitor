@@ -2,7 +2,7 @@ name: MOPS Daily Monitor
 
 on:
   schedule:
-    - cron: '0 10,13 * * *' # 台灣 18:00 與 21:00
+    - cron: '0 9,12 * * *' # 台灣 18:00 與 21:00
   workflow_dispatch:
 
 jobs:
