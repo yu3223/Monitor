@@ -82,23 +82,27 @@ def main():
     time.sleep(3)
     otc_list = check_mops_strictly(t_year, t_month, t_day, 'otc')
     
-    # 組合訊息：拿掉開頭的 \n，並使用動態日期
-    sii_display = ", ".join(sii_list) if sii_list else "查無所需資料"
-    otc_display = ", ".join(otc_list) if otc_list else "查無所需資料"
-    
-    final_msg = (
-        f"[{t_year}/{t_month}/{t_day}][{time_display}]\n"
-        f"上市: {sii_display}\n"
-        f"上櫃: {otc_display}"
-    )
-    
-    # --- 無論有無資料，一律發送 LINE 通知 ---
-    try:
-        line_bot_api = LineBotApi(CHANNEL_ACCESS_TOKEN)
-        line_bot_api.push_message(USER_ID, TextSendMessage(text=final_msg))
-        print(f"任務完成：{t_year}/{t_month}/{t_day} 的結果已發送至 LINE。")
-    except Exception as e:
-        print(f"LINE 發送失敗: {e}")
+    # --- 關鍵修改：判斷是否要發送訊息 ---
+    if sii_list or otc_list:
+        # 只要任一清單有資料，就組合訊息並發送
+        sii_display = ", ".join(sii_list) if sii_list else "查無所需資料"
+        otc_display = ", ".join(otc_list) if otc_list else "查無所需資料"
+        
+        final_msg = (
+            f"[{t_year}/{t_month}/{t_day}][{time_display}]\n"
+            f"上市: {sii_display}\n"
+            f"上櫃: {otc_display}"
+        )
+        
+        try:
+            line_bot_api = LineBotApi(CHANNEL_ACCESS_TOKEN)
+            line_bot_api.push_message(USER_ID, TextSendMessage(text=final_msg))
+            print(f"發現資料，通知已發送至 LINE。")
+        except Exception as e:
+            print(f"LINE 發送失敗: {e}")
+    else:
+        # 兩邊都沒資料時，只在 Log 紀錄，不騷擾使用者
+        print(f"ℹ️ {t_year}/{t_month}/{t_day} 查無任何庫藏股申報資料，跳過發送。")
 
 if __name__ == "__main__":
     main()
