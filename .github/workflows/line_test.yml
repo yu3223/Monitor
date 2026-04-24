@@ -2,7 +2,8 @@ name: MOPS Daily Monitor
 
 on:
   schedule:
-    - cron: '0 11 * * *' # 台灣 19:00
+    # 台灣時間 19:00 (UTC 11:00)
+    - cron: '0 11 * * *' 
   workflow_dispatch:
 
 jobs:
@@ -10,10 +11,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4 # 升級版本
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v5 # 升級版本
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
@@ -24,6 +25,6 @@ jobs:
         env:
           LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
-          # 加上這一行，告訴 GitHub 直接使用 Node.js 24
+          # 解決您看到的警告訊息
           FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
         run: python monitor.py
