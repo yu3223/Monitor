@@ -24,4 +24,6 @@ jobs:
         env:
           LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+          # 加上這一行，告訴 GitHub 直接使用 Node.js 24
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
         run: python monitor.py
