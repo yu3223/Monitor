@@ -15,8 +15,21 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 CHANNEL_ACCESS_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN')
 USER_ID = os.getenv('LINE_USER_ID')
 
-def check_mops_strictly(year, month, day, market_type):
-    """嚴格檢查日期並回傳公司清單"""
+def load_whitelist(filepath):
+    """讀取白名單檔案並回傳 set 格式，加速後續比對"""
+    whitelist = set()
+    if os.path.exists(filepath):
+        with open(filepath, 'r', encoding='utf-8') as f:
+            for line in f:
+                code = line.strip()
+                if code:  # 避免讀到空行
+                    whitelist.add(code)
+    else:
+        print(f"⚠️ 找不到白名單檔案：{filepath}，將以無白名單模式執行。")
+    return whitelist
+
+def check_mops_strictly(year, month, day, market_type, whitelist):
+    """嚴格檢查日期並回傳公司清單，若符合白名單則加上⭐️"""
     url = "https://mopsov.twse.com.tw/mops/web/ajax_t35sc09"
     
     payload = {
@@ -59,7 +72,12 @@ def check_mops_strictly(year, month, day, market_type):
                 if row_date == target_date:
                     code = cols[1].text.strip()
                     name = cols[2].text.strip()
-                    final_results.append(f"{code} {name}")
+                    
+                    # 關鍵修改：判斷是否在白名單內
+                    if code in whitelist:
+                        final_results.append(f"⭐️{code} {name}")
+                    else:
+                        final_results.append(f"{code} {name}")
         
         return list(dict.fromkeys(final_results))
 
@@ -68,6 +86,9 @@ def check_mops_strictly(year, month, day, market_type):
         return []
 
 def main():
+    # --- 讀取白名單 ---
+    whitelist = load_whitelist('whitelist.txt')
+
     # --- 自動抓取台灣當天日期 ---
     tw_tz = pytz.timezone('Asia/Taipei')
     now_dt = datetime.now(tw_tz)
@@ -77,21 +98,21 @@ def main():
     t_day = now_dt.day
     time_display = now_dt.strftime('%H:%M')
     
-    # 執行爬取
-    sii_list = check_mops_strictly(t_year, t_month, t_day, 'sii')
+    # 執行爬取，並將 whitelist 傳入
+    sii_list = check_mops_strictly(t_year, t_month, t_day, 'sii', whitelist)
     time.sleep(3)
-    otc_list = check_mops_strictly(t_year, t_month, t_day, 'otc')
+    otc_list = check_mops_strictly(t_year, t_month, t_day, 'otc', whitelist)
     
-    # --- 關鍵修改：判斷是否要發送訊息 ---
+    # --- 判斷是否要發送訊息 ---
     if sii_list or otc_list:
         # 只要任一清單有資料，就組合訊息並發送
-        sii_display = ", ".join(sii_list) if sii_list else "查無所需資料"
-        otc_display = ", ".join(otc_list) if otc_list else "查無所需資料"
+        sii_display = "\n".join(sii_list) if sii_list else "查無所需資料"
+        otc_display = "\n".join(otc_list) if otc_list else "查無所需資料"
         
         final_msg = (
             f"[{t_year}/{t_month}/{t_day}][{time_display}]\n"
-            f"上市: {sii_display}\n"
-            f"上櫃: {otc_display}"
+            f"【上市】\n{sii_display}\n\n"
+            f"【上櫃】\n{otc_display}"
         )
         
         try:
@@ -101,7 +122,7 @@ def main():
         except Exception as e:
             print(f"LINE 發送失敗: {e}")
     else:
-        # 兩邊都沒資料時，只在 Log 紀錄，不騷擾使用者
+        # 兩邊都沒資料時，只在 Log 紀錄，不傳送通知
         print(f"ℹ️ {t_year}/{t_month}/{t_day} 查無任何庫藏股申報資料，跳過發送。")
 
 if __name__ == "__main__":
